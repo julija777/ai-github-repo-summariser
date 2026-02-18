@@ -1,3 +1,26 @@
+#
+# Problem
+
+## LLM Model Returns Extra tags Causing 500 Error
+
+When using the summarizer, the LLM model returns extra text (such as `<think>` tags, explanations, or markdown) instead of only valid JSON. This causes the API to return a 500 error with a message like:
+
+```
+{"status": "error", "message": "LLM did not return valid JSON. Raw output: <think> ..."}
+```
+
+This happens because the backend expects the LLM to return a JSON object, but the model may prepend or append extra content, or ignore the system prompt. 
+
+As a result, the JSON parser fails and the API returns an error.
+
+### Debugging and Fixing
+
+- To debug, print/log the raw LLM output and inspect what extra text is present.
+- Try making the system prompt stricter ("Respond ONLY with valid JSON. No explanations, no tags, no markdown.").
+- Add code to extract the JSON object from the LLM output, or fallback to parsing fields from text.
+- If the model consistently ignores the prompt, consider using a different LLM or post-processing the output.
+
+Learning to handle and debug these LLM output issues is important for building robust AI-powered APIs.
 
 
 
