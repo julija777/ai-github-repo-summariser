@@ -1,12 +1,14 @@
 
 
 
-# AI GitHub Repo Summariser — Nebius Academy Admission Assignment
+# AI GitHub Repo Summariser 
 
 **Requires Python 3.10+**
 
 ## Overview
-This API service takes a GitHub repository URL and returns a human-readable summary of the project: what it does, what technologies are used, and how it's structured. It uses FastAPI and the Nebius Token Factory LLM API.
+This API service takes a GitHub repository URL and returns a human-readable summary of the project: 
+what it does, what technologies are used, and how it's structured. 
+It uses FastAPI and the Nebius Token Factory LLM API.
 
 ---
 
@@ -124,12 +126,6 @@ curl -X POST http://localhost:8000/summarize \
 
 ---
 
-## Model Choice
-
-This solution uses the `openchat/openchat-3.5-0106` model from Nebius Token Factory for its balance of cost, speed, and output structure. You can change the model in `main.py` if desired.
-
----
-
 ## Repository Processing Strategy
 
 - **Included:**
@@ -158,13 +154,6 @@ Respond in JSON with keys: summary, technologies (list), structure.
 
 ---
 
-
-## Notes
-- The Nebius API key is loaded from `.env` or environment and never hardcoded.
-- `.env`, `venv/`, and other unnecessary files are excluded via `.gitignore`.
-- Error handling is robust for invalid URLs, missing repos, LLM/API failures, and GitHub rate limits.
-
----
 
 ## Submission Checklist
 - [x] Working source code for the API service
