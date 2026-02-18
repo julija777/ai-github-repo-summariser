@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache/
+*.sqlite3
+.DS_Store
+*.log
+*.pot
+*.mo
+*.swp
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+
+# Environment variables
+.env
+settings.json
