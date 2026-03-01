@@ -1,28 +1,3 @@
-#
-# Problem
-
-## LLM Model Returns Extra tags Causing 500 Error
-
-When using the summarizer, the LLM model returns extra text (such as `<think>` tags, explanations, or markdown) instead of only valid JSON. This causes the API to return a 500 error with a message like:
-
-```
-{"status": "error", "message": "LLM did not return valid JSON. Raw output: <think> ..."}
-```
-
-This happens because the backend expects the LLM to return a JSON object, but the model may prepend or append extra content, or ignore the system prompt. 
-
-As a result, the JSON parser fails and the API returns an error.
-
-### Debugging and Fixing
-
-- To debug, print/log the raw LLM output and inspect what extra text is present.
-- Try making the system prompt stricter ("Respond ONLY with valid JSON. No explanations, no tags, no markdown.").
-- Add code to extract the JSON object from the LLM output, or fallback to parsing fields from text.
-- If the model consistently ignores the prompt, consider using a different LLM or post-processing the output.
-
-Learning to handle and debug these LLM output issues is important for building robust AI-powered APIs.
-
-
 
 # AI GitHub Repo Summariser 
 
@@ -93,7 +68,7 @@ flowchart TD
 
 ## Key Professional Improvements
 
-- Fails fast if Nebius API key is missing
+- Supports local fallback summaries when Nebius API key is missing or provider is unavailable
 - Uses GitHub repo's default branch for tree fetch
 - Cleans LLM JSON output before parsing
 - Adds timeouts to all requests
@@ -128,6 +103,36 @@ curl -X POST http://localhost:8000/summarize \
 	"structure": "The project follows a standard Python package layout..."
 }
 ```
+
+If the Nebius endpoint is unavailable (network/API outage or missing key), the API now returns a **local fallback summary** with the same JSON schema instead of a 500 error. This keeps `/summarize` testable in restricted/offline environments.
+
+### Local testing (quick copy/paste)
+
+1. Check server health:
+```bash
+curl -sS http://127.0.0.1:8000/health
+```
+
+2. Request a repository summary:
+```bash
+curl -sS -X POST http://127.0.0.1:8000/summarize \
+	-H "Content-Type: application/json" \
+	-d '{"github_url":"https://github.com/psf/requests"}'
+```
+
+3. Test invalid input handling:
+```bash
+curl -sS -X POST http://127.0.0.1:8000/summarize \
+	-H "Content-Type: application/json" \
+	-d '{"github_url":"not-a-github-url"}'
+```
+
+4. Open interactive docs:
+```text
+http://127.0.0.1:8000/docs
+```
+
+Note: `http://127.0.0.1:8000/` may return 404 because this API exposes `/health` and `/summarize`.
 
 ### Error Response (e.g. 404)
 ```json
@@ -177,9 +182,31 @@ Respond in JSON with keys: summary, technologies (list), structure.
 
 ---
 
+# Problems
 
-## Submission Checklist
-- [x] Working source code for the API service
-- [x] requirements.txt with all dependencies
-- [x] README.md with setup, model choice, and design notes
-- [x] .env and venv excluded from git
+## LLM Model Returns Extra tags Causing 500 Error
+
+When using the summarizer, the LLM model returns extra text (such as `<think>` tags, explanations, or markdown) instead of only valid JSON. This causes the API to return a 500 error with a message like:
+
+```
+{"status": "error", "message": "LLM did not return valid JSON. Raw output: <think> ..."}
+```
+
+This happens because the backend expects the LLM to return a JSON object, but the model may prepend or append extra content, or ignore the system prompt. 
+
+As a result, the JSON parser fails and the API returns an error.
+
+### Debugging and Fixing
+
+- To debug, print/log the raw LLM output and inspect what extra text is present.
+- Try making the system prompt stricter ("Respond ONLY with valid JSON. No explanations, no tags, no markdown.").
+- Add code to extract the JSON object from the LLM output, or fallback to parsing fields from text.
+- If the model consistently ignores the prompt, consider using a different LLM or post-processing the output.
+
+
+
+
+Swagger test response example:
+
+![FastAPI response screenshot](./Screenshot%202026-03-01%20at%2015.39.28.png)
+

@@ -3,6 +3,7 @@
 from dotenv import load_dotenv  # type: ignore
 load_dotenv()  # type: ignore
 import os
+import json
 from fastapi import FastAPI, HTTPException, status  # type: ignore
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field  # type: ignore
@@ -14,9 +15,7 @@ from typing import List, Optional
 NEBIUS_API_KEY = os.getenv("NEBIUS_API_KEY")
 NEBIUS_API_URL = "https://api.together.nebius.cloud/v1/completions"  # Example endpoint, update if needed
 
-# Fail fast if API key missing
-if not NEBIUS_API_KEY:
-    raise RuntimeError("NEBIUS_API_KEY environment variable is not set.")
+NEBIUS_AVAILABLE = bool(NEBIUS_API_KEY)
 
 IMPORTANT_FILES = ["README.md", "readme.md", "pyproject.toml", "requirements.txt", "package.json", "setup.py"]
 SKIP_DIRS = {".git", "venv", ".venv", "__pycache__", "node_modules", "dist", "build", ".mypy_cache"}
@@ -101,14 +100,65 @@ def build_prompt(readmes, py_snippets, tree_text):
         f"Directory tree:\n{tree_text}\n\n"
         f"README(s):\n{readmes}\n\n"
         f"Key Python files (snippets):\n{py_snippets}\n\n"
-        "Return ONLY valid JSON. Do not include explanations. Use this exact format:\n"
-        "{\n  'summary': '...',\n  'technologies': ['...'],\n  'structure': '...'\n}"
+        "Return ONLY valid JSON"
     )
     return prompt
 
 
+def infer_technologies(tree, readmes):
+    tech = []
+    paths = [item.get("path", "") for item in tree if item.get("type") == "blob"]
+    path_set = set(paths)
+    lower_readmes = (readmes or "").lower()
+
+    if any(p.endswith(".py") for p in paths):
+        tech.append("Python")
+    if "requirements.txt" in path_set or "pyproject.toml" in path_set:
+        tech.append("FastAPI")
+    if "package.json" in path_set:
+        tech.extend(["JavaScript", "Node.js"])
+    if any(p.endswith((".ts", ".tsx")) for p in paths):
+        tech.append("TypeScript")
+    if any("dockerfile" in p.lower() for p in paths):
+        tech.append("Docker")
+    if "react" in lower_readmes:
+        tech.append("React")
+    if "next.js" in lower_readmes or "nextjs" in lower_readmes:
+        tech.append("Next.js")
+
+    if not tech:
+        tech.append("GitHub-hosted source code")
+    return list(dict.fromkeys(tech))
+
+
+def build_fallback_summary(owner, repo, tree, selected_files, readmes, llm_error_message):
+    file_count = len([item for item in tree if item.get("type") == "blob" and not should_skip(item.get("path", ""))])
+    top_dirs = sorted({item["path"].split("/")[0] for item in tree if item.get("type") == "blob" and "/" in item.get("path", "") and not should_skip(item.get("path", ""))})
+    top_dirs_preview = ", ".join(top_dirs[:6]) if top_dirs else "root-level files"
+    technologies = infer_technologies(tree, readmes)
+    selected_preview = ", ".join(selected_files[:5]) if selected_files else "README/config files"
+
+    summary = (
+        f"{repo} appears to be an active software repository with approximately {file_count} relevant files. "
+        f"This summary was generated locally because the external LLM provider was unavailable at request time."
+    )
+    structure = (
+        f"Repository owner: {owner}. Top-level layout includes {top_dirs_preview}. "
+        f"Primary analysis used: {selected_preview}. "
+        f"LLM fallback reason: {llm_error_message}."
+    )
+    return {
+        "summary": summary,
+        "technologies": technologies,
+        "structure": structure,
+    }
+
+
 import re
 def call_nebius_llm(prompt):
+    if not NEBIUS_AVAILABLE:
+        raise RuntimeError("NEBIUS API key is missing.")
+
     headers = {
         "Authorization": f"Bearer {NEBIUS_API_KEY}",
         "Content-Type": "application/json"
@@ -119,16 +169,20 @@ def call_nebius_llm(prompt):
         "max_tokens": 512,
         "temperature": 0.2
     }
-    r = requests.post(NEBIUS_API_URL, headers=headers, json=payload, timeout=30)
+    try:
+        r = requests.post(NEBIUS_API_URL, headers=headers, json=payload, timeout=30)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"LLM provider request failed: {exc}") from exc
+
     if r.status_code != 200:
-        raise HTTPException(status_code=500, detail="Nebius LLM API error.")
+        raise RuntimeError(f"Nebius LLM API error (status {r.status_code}).")
     try:
         llm_text = r.json()["choices"][0]["text"]
         # Clean LLM output for JSON
         cleaned = re.sub(r"```json|```", "", llm_text).strip()
         return cleaned
-    except Exception:
-        raise HTTPException(status_code=500, detail="Malformed LLM response.")
+    except Exception as exc:
+        raise RuntimeError("Malformed LLM response.") from exc
 
 def get_directory_tree(tree):
     # Simple text tree for LLM context
@@ -206,18 +260,23 @@ def summarize_repo(request: RepoRequest):
                 total_chars += len(snippet)
         tree_text = get_directory_tree(tree)
         prompt = build_prompt(readmes, py_snippets, tree_text)
-        llm_response = call_nebius_llm(prompt)
-        import json
-        import re
         try:
+            llm_response = call_nebius_llm(prompt)
             cleaned = re.sub(r"```json|```", "", llm_response).strip()
             result = json.loads(cleaned)
-            # Validate result keys
             if not all(k in result for k in ("summary", "technologies", "structure")):
                 raise ValueError("Missing keys in LLM response")
             return RepoSummary(**result)
-        except Exception:
-            return JSONResponse(status_code=500, content=ErrorResponse(message="LLM did not return valid JSON.").dict())
+        except Exception as llm_exc:
+            fallback = build_fallback_summary(
+                owner=owner,
+                repo=repo,
+                tree=tree,
+                selected_files=selected_files,
+                readmes=readmes,
+                llm_error_message=str(llm_exc),
+            )
+            return RepoSummary(**fallback)
     except HTTPException as e:
         code = e.status_code if hasattr(e, "status_code") else 500
         detail = e.detail if hasattr(e, "detail") else str(e)
