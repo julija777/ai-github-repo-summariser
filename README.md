@@ -172,15 +172,11 @@ Note: `http://127.0.0.1:8000/` may return 404 because this API exposes `/health`
 
 ---
 
-## Prompt Engineering
-
-The LLM prompt explicitly requests:
-
-```
-Respond in JSON with keys: summary, technologies (list), structure.
-```
-
 ---
+
+# Swagger test response example:
+
+![FastAPI response screenshot](./Screenshot%202026-03-01%20at%2015.39.28.png)
 
 # Problems
 
@@ -205,8 +201,4 @@ As a result, the JSON parser fails and the API returns an error.
 
 
 
-
-Swagger test response example:
-
-![FastAPI response screenshot](./Screenshot%202026-03-01%20at%2015.39.28.png)
 
